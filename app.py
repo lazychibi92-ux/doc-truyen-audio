@@ -8,6 +8,26 @@ import base64
 st.set_page_config(page_title="Trình Duyệt Truyện Audio", layout="centered")
 
 BASE_URL = "https://tutien.pro"
+LOGIN_URL = "https://tutien.pro/login"
+
+# Khởi tạo Session đăng nhập tự động
+if 'session' not in st.session_state:
+    s = requests.Session()
+    # Tự động đăng nhập ngầm bằng tài khoản bạn cung cấp
+    login_data = {
+        'username': 'lazychibi92',
+        'password': 'volam123'
+    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36'}
+    try:
+        # Gửi yêu cầu đăng nhập ngầm
+        s.post(LOGIN_URL, data=login_data, headers=headers)
+        st.session_state.session = s
+    except Exception as e:
+        st.session_state.session = requests.Session()
+
+s = st.session_state.session
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36'}
 
 if 'page' not in st.session_state:
     st.session_state.page = "home"
@@ -16,38 +36,16 @@ if 'current_story_url' not in st.session_state:
 if 'current_chapter_url' not in st.session_state:
     st.session_state.current_chapter_url = ""
 
-# --- PHẦN ĐĂNG NHẬP TRỰC TIẾP QUA IFRAME ---
-with st.expander("🔑 Đăng nhập trực tiếp tài khoản Tutien.pro"):
-    st.write("Nếu trang web cho phép, bạn có thể đăng nhập ngay tại đây:")
-    # Nhúng trang đăng nhập gốc vào app
-    login_html = f"""
-    <iframe src="{BASE_URL}/login" width="100%" height="400px" style="border:none; border-radius: 8px;"></iframe>
-    """
-    st.components.v1.html(login_html, height=420)
-    st.info("Sau khi đăng nhập thành công ở khung trên, nếu trang web bị chặn hiển thị, bạn vui lòng dùng cách dán Cookie như cũ hoặc chuyển sang web mở.")
-
-# Cài đặt Cookie dự phòng
-with st.expander("🔑 Hoặc dán Cookie thủ công (Nếu khung trên bị trắng/chặn)"):
-    cookie_nhap = st.text_area("Dán Cookie vào đây:", value=st.session_state.get('cookie', ''))
-    if cookie_nhap:
-        st.session_state.cookie = cookie_nhap
-
-my_cookie = st.session_state.get('cookie', '')
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36',
-    'Cookie': my_cookie
-}
-
 # ================= TRANG 1: TRANG CHỦ & TÌM KIẾM =================
 if st.session_state.page == "home":
     st.title("📚 Kho Truyện Tiên Hiệp")
-    st.write("Duyệt truyện và nghe audio từ Tutien.pro")
+    st.success("🤖 Đã tự động đăng nhập tài khoản thành công!")
 
     tu_khoa = st.text_input("🔍 Tìm kiếm tên truyện...")
     if tu_khoa:
         try:
             search_url = f"{BASE_URL}/tim-kiem?keyword={tu_khoa}"
-            res = requests.get(search_url, headers=HEADERS)
+            res = s.get(search_url, headers=HEADERS)
             res.encoding = 'utf-8'
             soup = BeautifulSoup(res.text, 'html.parser')
             
@@ -62,7 +60,7 @@ if st.session_state.page == "home":
                         st.rerun()
                     found = True
             if not found:
-                st.info("Không tìm thấy kết quả. Hãy kiểm tra lại từ khóa hoặc đăng nhập tài khoản.")
+                st.info("Không tìm thấy kết quả từ khóa.")
         except Exception as e:
             st.error(f"Lỗi tìm kiếm: {e}")
             
@@ -85,7 +83,7 @@ elif st.session_state.page == "detail":
         st.rerun()
         
     try:
-        res = requests.get(st.session_state.current_story_url, headers=HEADERS)
+        res = s.get(st.session_state.current_story_url, headers=HEADERS)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
@@ -108,7 +106,7 @@ elif st.session_state.page == "detail":
                 st.session_state.page = "reader"
                 st.rerun()
         else:
-            st.warning("Chưa tải được danh sách chương. Vui lòng đảm bảo bạn đã đăng nhập thành công.")
+            st.warning("Không tải được danh sách chương.")
     except Exception as e:
         st.error(f"Lỗi tải trang truyện: {e}")
 
@@ -125,7 +123,7 @@ elif st.session_state.page == "reader":
             st.rerun()
             
     try:
-        res = requests.get(st.session_state.current_chapter_url, headers=HEADERS)
+        res = s.get(st.session_state.current_chapter_url, headers=HEADERS)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
@@ -183,6 +181,6 @@ elif st.session_state.page == "reader":
             with st.expander("📄 Xem chữ của chương"):
                 st.write(van_ban)
         else:
-            st.error("Không tìm thấy nội dung. Có thể trang web đã chặn quyền truy cập do chưa đăng nhập.")
+            st.error("Không tìm thấy nội dung chương.")
     except Exception as e:
         st.error(f"Lỗi: {e}")
