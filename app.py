@@ -9,7 +9,6 @@ st.set_page_config(page_title="Trình Duyệt Truyện Audio", layout="centered"
 
 BASE_URL = "https://tutien.pro"
 
-# Quản lý Session State để lưu trạng thái điều hướng
 if 'page' not in st.session_state:
     st.session_state.page = "home"
 if 'current_story_url' not in st.session_state:
@@ -17,9 +16,19 @@ if 'current_story_url' not in st.session_state:
 if 'current_chapter_url' not in st.session_state:
     st.session_state.current_chapter_url = ""
 
-# --- PHẦN 0: CÀI ĐẶT COOKIE (VƯỢT ĐĂNG NHẬP) ---
-with st.expander("🔑 Cài đặt Cookie tài khoản (Bắt buộc nếu web yêu cầu đăng nhập)"):
-    cookie_nhap = st.text_area("Dán Cookie tutien.pro của bạn vào đây:", value=st.session_state.get('cookie', ''))
+# --- PHẦN ĐĂNG NHẬP TRỰC TIẾP QUA IFRAME ---
+with st.expander("🔑 Đăng nhập trực tiếp tài khoản Tutien.pro"):
+    st.write("Nếu trang web cho phép, bạn có thể đăng nhập ngay tại đây:")
+    # Nhúng trang đăng nhập gốc vào app
+    login_html = f"""
+    <iframe src="{BASE_URL}/login" width="100%" height="400px" style="border:none; border-radius: 8px;"></iframe>
+    """
+    st.components.v1.html(login_html, height=420)
+    st.info("Sau khi đăng nhập thành công ở khung trên, nếu trang web bị chặn hiển thị, bạn vui lòng dùng cách dán Cookie như cũ hoặc chuyển sang web mở.")
+
+# Cài đặt Cookie dự phòng
+with st.expander("🔑 Hoặc dán Cookie thủ công (Nếu khung trên bị trắng/chặn)"):
+    cookie_nhap = st.text_area("Dán Cookie vào đây:", value=st.session_state.get('cookie', ''))
     if cookie_nhap:
         st.session_state.cookie = cookie_nhap
 
@@ -32,9 +41,8 @@ HEADERS = {
 # ================= TRANG 1: TRANG CHỦ & TÌM KIẾM =================
 if st.session_state.page == "home":
     st.title("📚 Kho Truyện Tiên Hiệp")
-    st.write("Duyệt truyện và nghe audio rảnh tay từ Tutien.pro")
+    st.write("Duyệt truyện và nghe audio từ Tutien.pro")
 
-    # Thanh tìm kiếm
     tu_khoa = st.text_input("🔍 Tìm kiếm tên truyện...")
     if tu_khoa:
         try:
@@ -43,10 +51,6 @@ if st.session_state.page == "home":
             res.encoding = 'utf-8'
             soup = BeautifulSoup(res.text, 'html.parser')
             
-            items = soup.find_all('div', class_='item-truyen') or soup.find_all('h3', class_='title')
-            st.subheader("Kết quả tìm kiếm:")
-            
-            # Quét tìm link truyện
             found = False
             for a in soup.find_all('a', href=True):
                 if '/truyen/' in a['href'] and a.get_text(strip=True):
@@ -58,13 +62,12 @@ if st.session_state.page == "home":
                         st.rerun()
                     found = True
             if not found:
-                st.info("Không tìm thấy kết quả hoặc từ khóa chưa chính xác.")
+                st.info("Không tìm thấy kết quả. Hãy kiểm tra lại từ khóa hoặc đăng nhập tài khoản.")
         except Exception as e:
             st.error(f"Lỗi tìm kiếm: {e}")
             
     st.markdown("---")
-    st.subheader("💡 Hoặc dán trực tiếp link truyện / chương bất kỳ:")
-    direct_link = st.text_input("Dán link vào đây:")
+    direct_link = st.text_input("Hoặc dán trực tiếp link truyện / chương vào đây:")
     if direct_link:
         if "chuong" in direct_link:
             st.session_state.current_chapter_url = direct_link
@@ -75,7 +78,7 @@ if st.session_state.page == "home":
             st.session_state.page = "detail"
             st.rerun()
 
-# ================= TRANG 2: CHI TIẾT TRUYỆN & MỤC LỤC =================
+# ================= TRANG 2: CHI TIẾT TRUYỆN =================
 elif st.session_state.page == "detail":
     if st.button("⬅ Quay lại trang chủ"):
         st.session_state.page = "home"
@@ -86,13 +89,10 @@ elif st.session_state.page == "detail":
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # Lấy tên truyện
         tieu_de_truyen = soup.find('h1') or soup.find('h2', class_='title')
         st.title(tieu_de_truyen.get_text(strip=True) if tieu_de_truyen else "Thông tin truyện")
         
         st.subheader("📑 Danh sách chương:")
-        
-        # Lấy danh sách các chương
         list_chuong = []
         for a in soup.find_all('a', href=True):
             if 'chuong-' in a['href']:
@@ -102,18 +102,17 @@ elif st.session_state.page == "detail":
                     list_chuong.append((c_name, c_link))
                     
         if list_chuong:
-            # Hiển thị dạng chọn dropdown hoặc các nút bấm danh sách
-            chon_chuong = st.selectbox("Chọn chương để đọc/nghe:", list_chuong, format_func=lambda x: x[0])
+            chon_chuong = st.selectbox("Chọn chương:", list_chuong, format_func=lambda x: x[0])
             if st.button("🚀 Bắt đầu nghe chương này"):
                 st.session_state.current_chapter_url = chon_chuong[1]
                 st.session_state.page = "reader"
                 st.rerun()
         else:
-            st.warning("Chưa tải được danh sách chương. Hãy kiểm tra lại Cookie đăng nhập.")
+            st.warning("Chưa tải được danh sách chương. Vui lòng đảm bảo bạn đã đăng nhập thành công.")
     except Exception as e:
         st.error(f"Lỗi tải trang truyện: {e}")
 
-# ================= TRANG 3: TRÌNH ĐỌC & PHÁT AUDIO TỰ ĐỘNG =================
+# ================= TRANG 3: ĐỌC & AUDIO =================
 elif st.session_state.page == "reader":
     col1, col2 = st.columns(2)
     with col1:
@@ -130,11 +129,9 @@ elif st.session_state.page == "reader":
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # Tiêu đề chương
         tieu_de_c = soup.find('h2', class_='chapter-title') or soup.find('a', class_='chapter-title')
         st.subheader(tieu_de_c.get_text(strip=True) if tieu_de_c else "Chương Truyện")
         
-        # Nội dung chữ
         noi_dung_div = soup.find('div', id='chapter-content') or soup.find('div', class_='chapter-c')
         if not noi_dung_div:
             noi_dung_div = soup.find('div', class_='box-content')
@@ -143,14 +140,13 @@ elif st.session_state.page == "reader":
             van_ban = noi_dung_div.get_text(separator=' ', strip=True)
             
             with st.spinner("🤖 AI đang tạo giọng đọc âm thanh..."):
-                tts = gTTS(text=van_ban[:3500], lang='vi', slow=False) # Lấy 3500 ký tự đầu mỗi chương
+                tts = gTTS(text=van_ban[:3500], lang='vi', slow=False)
                 tts.save("temp_voice.mp3")
                 
             with open("temp_voice.mp3", "rb") as f:
                 audio_bytes = f.read()
             audio_base64 = base64.b64encode(audio_bytes).decode()
             
-            # Tìm link chương sau để tự động chuyển
             link_sau = ""
             nut_sau = soup.find('a', id='next-chapter') or soup.find('a', class_=['btn', 'next'])
             if not nut_sau:
@@ -162,7 +158,6 @@ elif st.session_state.page == "reader":
                 n_href = nut_sau['href']
                 link_sau = n_href if n_href.startswith('http') else BASE_URL + n_href
                 
-            # Trình phát audio kèm lệnh tự động chạy chương tiếp theo
             if link_sau:
                 st.write("Trạng thái: **Tự động chuyển chương khi đọc xong** 🔄")
                 audio_html = f"""
@@ -172,13 +167,13 @@ elif st.session_state.page == "reader":
                 <script>
                 var audio = document.getElementById('audio-player');
                 audio.onended = function() {{
-                    window.location.href = window.location.href; // Tải lại để nhận chương mới
+                    window.location.href = window.location.href;
                 }};
                 </script>
                 """
                 st.components.v1.html(audio_html, height=100)
                 
-                if st.button("⏩ Chuyển sang chương tiếp theo ngay lập tức"):
+                if st.button("⏩ Chuyển chương tiếp theo"):
                     st.session_state.current_chapter_url = link_sau
                     st.rerun()
             else:
@@ -188,6 +183,6 @@ elif st.session_state.page == "reader":
             with st.expander("📄 Xem chữ của chương"):
                 st.write(van_ban)
         else:
-            st.error("Không tìm thấy nội dung chương. Hãy kiểm tra lại Cookie tài khoản của bạn.")
+            st.error("Không tìm thấy nội dung. Có thể trang web đã chặn quyền truy cập do chưa đăng nhập.")
     except Exception as e:
         st.error(f"Lỗi: {e}")
